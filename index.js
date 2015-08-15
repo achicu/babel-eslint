@@ -416,6 +416,7 @@ exports.parse = function (code) {
   var opts = {
     locations: true,
     ranges: true,
+    allowImportExportEverywhere: true
   };
 
   var comments = opts.onComment = [];
