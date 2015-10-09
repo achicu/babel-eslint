@@ -2,7 +2,34 @@
 "use strict";
 var eslint = require("eslint");
 
-function verifyAndAssertMessages(code, rules, expectedMessages) {
+function verifyAndAssertMessages(code, rules, expectedMessages, features) {
+  var defaultEcmaFeatures = {
+    arrowFunctions: true,
+    binaryLiterals: true,
+    blockBindings: true,
+    classes: true,
+    defaultParams: true,
+    destructuring: true,
+    forOf: true,
+    generators: true,
+    modules: true,
+    objectLiteralComputedProperties: true,
+    objectLiteralDuplicateProperties: true,
+    objectLiteralShorthandMethods: true,
+    objectLiteralShorthandProperties: true,
+    octalLiterals: true,
+    regexUFlag: true,
+    regexYFlag: true,
+    restParams: true,
+    spread: true,
+    superInFunctions: true,
+    templateStrings: true,
+    unicodeCodePointEscapes: true,
+    globalReturn: true,
+    jsx: true,
+    experimentalObjectRestSpread: true
+  };
+
   var messages = eslint.linter.verify(
     code,
     {
@@ -10,7 +37,8 @@ function verifyAndAssertMessages(code, rules, expectedMessages) {
       rules: rules,
       env: {
         node: true
-      }
+      },
+      ecmaFeatures: features || defaultEcmaFeatures
     }
   );
 
@@ -47,14 +75,16 @@ describe("verify", function () {
     verifyAndAssertMessages(
       "{ , res }",
       {},
-      [ "1:3 Unexpected token" ]
+      [ "1:3 Parsing error: Unexpected token" ]
     );
   });
 
   it("Modules support (issue #5)", function () {
     verifyAndAssertMessages(
       "import Foo from 'foo';\n" +
-      "export default Foo;",
+      "export default Foo;\n" +
+      "export const c = 'c';\n" +
+      "export class Store {}",
       {},
       []
     );
@@ -109,11 +139,12 @@ describe("verify", function () {
   });
 
   // fix after updating to ESLint 1.0.0
-  it("Arrow function with non-block bodies (issue #20)", function () {
+  it.skip("Arrow function with non-block bodies (issue #20)", function () {
     verifyAndAssertMessages(
       "\"use strict\"; () => 1",
       { "strict": [1, "global"] },
-      []
+      [],
+      { modules: false }
     );
   });
 
@@ -121,6 +152,26 @@ describe("verify", function () {
     verifyAndAssertMessages(
       "async function foo() { await bar(); }",
       { "no-unused-expressions": 1 },
+      []
+    );
+  });
+
+  it("arrow functions (issue #27)", function () {
+    verifyAndAssertMessages(
+      "[1, 2, 3].map(i => i * 2);",
+      { "func-names": 1, "space-before-blocks": 1 },
+      []
+    );
+  });
+
+  it("comment with padded-blocks (issue #33)", function () {
+    verifyAndAssertMessages([
+        "if (a){",
+          "// i'm a comment!",
+         "let b = c",
+        "}"
+      ].join("\n"),
+      { "padded-blocks": [1, "never"] },
       []
     );
   });
@@ -356,7 +407,7 @@ describe("verify", function () {
           "var b: T = 1; b;"
         ].join("\n"),
         { "no-unused-vars": 1, "no-undef": 1 },
-        [ "1:21 T is defined but never used no-unused-vars",
+        [ "1:21 \"T\" is defined but never used no-unused-vars",
           '2:8 "T" is not defined. no-undef' ]
       );
     });
@@ -967,7 +1018,7 @@ describe("verify", function () {
     );
   });
 
-  it("class properties", function () {
+  it("class properties #71", function () {
     verifyAndAssertMessages(
       "class Lol { foo = 'bar'; }",
       { "no-undef": 1 },
@@ -1172,7 +1223,7 @@ describe("verify", function () {
     verifyAndAssertMessages(
       "var unused;",
       { "no-unused-vars": 1 },
-      [ "1:5 unused is defined but never used no-unused-vars" ]
+      [ "1:5 \"unused\" is defined but never used no-unused-vars" ]
     );
   });
 
@@ -1188,7 +1239,7 @@ describe("verify", function () {
     verifyAndAssertMessages(
       "const {Bacona} = require('baconjs')",
       { "no-undef": 1, "no-unused-vars": 1 },
-      [ "1:8 Bacona is defined but never used no-unused-vars" ]
+      [ "1:8 \"Bacona\" is defined but never used no-unused-vars" ]
     );
   });
 
@@ -1240,21 +1291,21 @@ describe("verify", function () {
     );
   });
 
-  // it("line comment space-in-parens #124", function () {
-  //   verifyAndAssertMessages(
-  //     [
-  //       "React.createClass({",
-  //         "render() {",
-  //            "// return (",
-  //            "//   <div />",
-  //            "// ); // <-- this is the line that is reported",
-  //         "}",
-  //       "});"
-  //     ].join("\n"),
-  //     { "space-in-parens": 1 },
-  //     [ ]
-  //   )
-  // });
+  it("line comment space-in-parens #124", function () {
+    verifyAndAssertMessages(
+      [
+        "React.createClass({",
+          "render() {",
+             "// return (",
+             "//   <div />",
+             "// ); // <-- this is the line that is reported",
+          "}",
+        "});"
+      ].join("\n"),
+      { "space-in-parens": 1 },
+      [ ]
+    )
+  });
 
   it("block comment space-in-parens #124", function () {
     verifyAndAssertMessages(
@@ -1271,6 +1322,50 @@ describe("verify", function () {
       ].join("\n"),
       { "space-in-parens": 1 },
       [ ]
+    )
+  });
+
+  it("no no-undef error with rest #11", function () {
+    verifyAndAssertMessages("const [a, ...rest] = ['1', '2', '3']; a; rest;",
+      { "no-undef": 1, "no-unused-vars": 1 },
+      [ ]
+    )
+  });
+
+  it("async function with space-before-function-paren #168", function () {
+    verifyAndAssertMessages("it('handles updates', async function() {});",
+      { "space-before-function-paren": [1, "never"] },
+      [ ]
+    )
+  });
+
+  it("default param flow type no-unused-vars #184", function () {
+    verifyAndAssertMessages(
+      [
+        "type ResolveOptionType = {",
+          "depth?: number,",
+          "identifier?: string",
+        "};",
+        "",
+        "export default function resolve(",
+          "options: ResolveOptionType = {}",
+        "): Object {",
+          "options;",
+        "}",
+      ].join("\n"),
+      { "no-unused-vars": 1, "no-undef": 1 },
+      [ ]
+    )
+  });
+
+  it("no-use-before-define #192", function () {
+    verifyAndAssertMessages(
+      [
+        "console.log(x);",
+        "var x = 1;"
+      ].join("\n"),
+      { "no-use-before-define": 1 },
+      [ "1:13 x was used before it was defined no-use-before-define" ]
     )
   });
 });
