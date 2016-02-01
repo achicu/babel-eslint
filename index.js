@@ -80,6 +80,25 @@ function monkeypatch() {
   }
   var referencerMod = createModule(referencerLoc);
   var referencer = require(referencerLoc);
+  if (referencer.__esModule) {
+    referencer = referencer.default;
+  }
+
+  // monkeypatch escope/pattern-visitor
+  var patternVisitorLoc;
+  var patternVisitorMod;
+  var patternVisitor;
+  try {
+    patternVisitorLoc = Module._resolveFilename("./pattern-visitor", escopeMod);
+    patternVisitorMod = createModule(patternVisitorLoc);
+    patternVisitor = require(patternVisitorLoc);
+    if (patternVisitor.__esModule) {
+      patternVisitor = patternVisitor.default;
+    }
+  } catch (err) {
+    // When eslint uses old escope, we cannot find pattern visitor.
+    // Fallback to the old way.
+  }
 
   // reference Definition
   var definitionLoc;
@@ -265,6 +284,12 @@ function monkeypatch() {
       this.close(node);
     }
   };
+
+  if (patternVisitor) {
+    patternVisitor.prototype.SpreadProperty = function (node) {
+      this.visit(node.argument);
+    };
+  }
 
   // visit flow type in VariableDeclaration
   var variableDeclaration = referencer.prototype.VariableDeclaration;
