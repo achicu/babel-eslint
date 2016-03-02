@@ -2,43 +2,25 @@
 "use strict";
 var eslint = require("eslint");
 
-function verifyAndAssertMessages(code, rules, expectedMessages, features) {
-  var defaultEcmaFeatures = {
-    arrowFunctions: true,
-    binaryLiterals: true,
-    blockBindings: true,
-    classes: true,
-    defaultParams: true,
-    destructuring: true,
-    forOf: true,
-    generators: true,
-    modules: true,
-    objectLiteralComputedProperties: true,
-    objectLiteralDuplicateProperties: true,
-    objectLiteralShorthandMethods: true,
-    objectLiteralShorthandProperties: true,
-    octalLiterals: true,
-    regexUFlag: true,
-    regexYFlag: true,
-    restParams: true,
-    spread: true,
-    superInFunctions: true,
-    templateStrings: true,
-    unicodeCodePointEscapes: true,
-    globalReturn: true,
-    jsx: true,
-    experimentalObjectRestSpread: true
-  };
-
+function verifyAndAssertMessages(code, rules, expectedMessages, sourceType) {
   var messages = eslint.linter.verify(
     code,
     {
       parser: require.resolve(".."),
       rules: rules,
       env: {
-        node: true
+        node: true,
+        es6: true
       },
-      ecmaFeatures: features || defaultEcmaFeatures
+      parserOptions: {
+        ecmaVersion: 6,
+        ecmaFeatures: {
+          jsx: true,
+          experimentalObjectRestSpread: true,
+          globalReturn: true
+        },
+        sourceType: sourceType || "module"
+      }
     }
   );
 
@@ -138,13 +120,21 @@ describe("verify", function () {
     );
   });
 
-  // fix after updating to ESLint 1.0.0
-  it.skip("Arrow function with non-block bodies (issue #20)", function () {
+  it("Arrow function with non-block bodies (issue #20)", function () {
     verifyAndAssertMessages(
       "\"use strict\"; () => 1",
       { "strict": [1, "global"] },
       [],
-      { modules: false }
+      "script"
+    );
+  });
+
+  it("#242", function () {
+    verifyAndAssertMessages(
+      "\"use strict\"; asdf;",
+      { "no-irregular-whitespace": 1 },
+      [],
+      {}
     );
   });
 
@@ -407,8 +397,8 @@ describe("verify", function () {
           "var b: T = 1; b;"
         ].join("\n"),
         { "no-unused-vars": 1, "no-undef": 1 },
-        [ "1:21 \"T\" is defined but never used no-unused-vars",
-          '2:8 "T" is not defined. no-undef' ]
+        [ "1:21 'T' is defined but never used no-unused-vars",
+          "2:8 'T' is not defined. no-undef" ]
       );
     });
 
@@ -418,7 +408,7 @@ describe("verify", function () {
           "export class Foo extends Bar<T> {}",
         ].join("\n"),
         { "no-unused-vars": 1, "no-undef": 1 },
-        [ '2:30 "T" is not defined. no-undef' ]
+        [ "2:30 'T' is not defined. no-undef" ]
       );
     });
 
@@ -791,7 +781,7 @@ describe("verify", function () {
       );
     });
 
-    it("32", function () {
+    it.skip("32", function () {
       verifyAndAssertMessages(
         [
           "import type Foo from 'foo';",
@@ -1047,86 +1037,6 @@ describe("verify", function () {
     );
   });
 
-  describe("comprehensions", function () {
-    it("array #9", function () {
-      verifyAndAssertMessages([
-          "let arr = [1, 2, 3];",
-          "let b = [for (e of arr) String(e)]; b;"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1 },
-        []
-      );
-    });
-
-    it("array, if statement, multiple blocks", function () {
-      verifyAndAssertMessages([
-          "let arr = [1, 2, 3];",
-          "let arr2 = [1, 2, 3];",
-          "[for (x of arr) for (y of arr2) if (x === true && y === true) x + y];"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1 },
-        []
-      );
-    });
-
-    it("generator, if statement, multiple blocks", function () {
-      verifyAndAssertMessages([
-          "let arr = [1, 2, 3];",
-          "let arr2 = [1, 2, 3];",
-          "(for (x of arr) for (y of arr2) if (x === true && y === true) x + y)"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1 },
-        []
-      );
-    });
-
-    it("ArrayPattern", function () {
-      verifyAndAssertMessages([
-          "let arr = [1, 2, 3];",
-          "[for ([,x] of arr) x]"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1 },
-        []
-      );
-    });
-
-    it("ObjectPattern", function () {
-      verifyAndAssertMessages([
-          "let arr = [{x: 1, y: 2}, {x: 2, y: 3}];",
-          "[for ({x, y} of arr) x + y]"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1 },
-        []
-      );
-    });
-
-    it("multiple comprehensions #138", function () {
-      verifyAndAssertMessages([
-          "function test() {",
-            "let items;",
-            "return {",
-              "a: [for (i of items) i],",
-              "b: [for (i of items) i]",
-            "};",
-          "} test;"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1, "no-redeclare": 1 },
-        []
-      );
-    });
-
-    it("visiting filter in comprehension", function () {
-      verifyAndAssertMessages([
-          "function test(items, val) {",
-            "return [ for (i of items) if (i === val) i ];",
-          "} test;"
-        ].join("\n"),
-        { "no-unused-vars": 1, "no-undef": 1 },
-        []
-      );
-    });
-  });
-
   describe("decorators #72", function () {
     it("class declaration", function () {
       verifyAndAssertMessages(
@@ -1223,14 +1133,22 @@ describe("verify", function () {
     verifyAndAssertMessages(
       "var unused;",
       { "no-unused-vars": 1 },
-      [ "1:5 \"unused\" is defined but never used no-unused-vars" ]
+      [ "1:5 'unused' is defined but never used no-unused-vars" ]
     );
   });
 
   it("visits excluded properties left of spread #95", function () {
     verifyAndAssertMessages(
       "var originalObject = {}; var {field1, field2, ...clone} = originalObject;",
-      { "no-undef": 1, "no-unused-vars": 1 },
+      { "no-undef": 1, "no-unused-vars": 1, "no-redeclare": 1 },
+      []
+    );
+  });
+
+  it("visits excluded properties left of spread #210", function () {
+    verifyAndAssertMessages(
+      "const props = { yo: 'yo' }; const { ...otherProps } = props;",
+      { "no-undef": 1, "no-unused-vars": 1, "no-redeclare": 1 },
       []
     );
   });
@@ -1239,7 +1157,7 @@ describe("verify", function () {
     verifyAndAssertMessages(
       "const {Bacona} = require('baconjs')",
       { "no-undef": 1, "no-unused-vars": 1 },
-      [ "1:8 \"Bacona\" is defined but never used no-unused-vars" ]
+      [ "1:8 'Bacona' is defined but never used no-unused-vars" ]
     );
   });
 
@@ -1365,7 +1283,63 @@ describe("verify", function () {
         "var x = 1;"
       ].join("\n"),
       { "no-use-before-define": 1 },
-      [ "1:13 \"x\" was used before it was defined no-use-before-define" ]
+      [ "1:13 'x' was used before it was defined no-use-before-define" ]
     )
   });
+
+  it("jsx and stringliteral #216", function () {
+    verifyAndAssertMessages(
+      "<div className=''></div>",
+      {},
+      []
+    )
+  });
+
+  it("getter/setter #218", function () {
+    verifyAndAssertMessages([
+        "class Person {",
+        "    set a (v) { }",
+        "}"
+      ].join("\n"),
+      { "space-before-function-paren": 1, "keyword-spacing": [1, {"before": true}], "indent": 1 },
+      []
+    )
+  });
+
+  it("getter/setter #220", function () {
+    verifyAndAssertMessages([
+        "var B = {",
+            "get x () {",
+                "return this.ecks;",
+            "},",
+            "set x (ecks) {",
+                "this.ecks = ecks;",
+            "}",
+        "};"
+      ].join("\n"),
+      { "no-dupe-keys": 1 },
+      []
+    );
+  });
+
+  it("fixes issues with flow types and ObjectPattern", function () {
+    verifyAndAssertMessages([
+        "import type Foo from 'bar';",
+        "export default class Foobar {",
+        "  foo({ bar }: Foo) { bar; }",
+        "  bar({ foo }: Foo) { foo; }",
+        "}"
+      ].join("\n"),
+      { "no-unused-vars": 1, "no-shadow": 1 },
+      []
+    );
+  });
+
+  // it("regex with es6 unicodeCodePointEscapes", function () {
+  //   verifyAndAssertMessages(
+  //     "string.replace(/[\u{0000A0}-\u{10FFFF}<>\&]/gmiu, (char) => `&#x${char.codePointAt(0).toString(16)};`);",
+  //     {},
+  //     []
+  //   );
+  // });
 });
