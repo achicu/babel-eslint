@@ -55,10 +55,14 @@ function monkeypatch() {
   estraverses.push(estraverse);
   assign(estraverse.VisitorKeys, t.VISITOR_KEYS);
 
-  // monkeypatch estraverse-fb
-  var estraverseFb = eslintMod.require("estraverse-fb");
-  estraverses.push(estraverseFb);
-  assign(estraverseFb.VisitorKeys, t.VISITOR_KEYS);
+  // monkeypatch estraverse-fb (only for eslint < 2.3.0)
+  try {
+    var estraverseFb = eslintMod.require("estraverse-fb");
+    estraverses.push(estraverseFb);
+    assign(estraverseFb.VisitorKeys, t.VISITOR_KEYS);
+  } catch (err) {
+      // Ignore: ESLint v2.3.0 does not have estraverse-fb
+  }
 
   // ESLint v1.9.0 uses estraverse directly to work around https://github.com/npm/npm/issues/9663
   var estraverseOfEslint = eslintMod.require("estraverse");
@@ -73,6 +77,7 @@ function monkeypatch() {
   escope.analyze = function (ast, opts) {
     opts.ecmaVersion = 6;
     opts.sourceType = "module";
+
     var results = analyze.call(this, ast, opts);
     return results;
   };
@@ -88,22 +93,6 @@ function monkeypatch() {
   var referencer = require(referencerLoc);
   if (referencer.__esModule) {
     referencer = referencer.default;
-  }
-
-  // monkeypatch escope/pattern-visitor
-  var patternVisitorLoc;
-  var patternVisitorMod;
-  var patternVisitor;
-  try {
-    patternVisitorLoc = Module._resolveFilename("./pattern-visitor", escopeMod);
-    patternVisitorMod = createModule(patternVisitorLoc);
-    patternVisitor = require(patternVisitorLoc);
-    if (patternVisitor.__esModule) {
-      patternVisitor = patternVisitor.default;
-    }
-  } catch (err) {
-    // When eslint uses old escope, we cannot find pattern visitor.
-    // Fallback to the old way.
   }
 
   // reference Definition
@@ -302,12 +291,6 @@ function monkeypatch() {
     }
   };
 
-  if (patternVisitor) {
-    patternVisitor.prototype.SpreadProperty = function (node) {
-      this.visit(node.argument);
-    };
-  }
-
   // visit flow type in VariableDeclaration
   var variableDeclaration = referencer.prototype.VariableDeclaration;
   referencer.prototype.VariableDeclaration = function(node) {
@@ -317,18 +300,6 @@ function monkeypatch() {
         var typeAnnotation = id.typeAnnotation;
         if (typeAnnotation) {
           checkIdentifierOrVisit.call(this, typeAnnotation);
-        }
-        if (id.type === "ObjectPattern") {
-          // check if object destructuring has a spread
-          var hasSpread = id.properties.filter(function(p) {
-            return p._babelType === "SpreadProperty" || p._babelType === "RestProperty";
-          });
-          // visit properties if so
-          if (hasSpread.length > 0) {
-            for (var j = 0; j < id.properties.length; j++) {
-              this.visit(id.properties[j]);
-            }
-          }
         }
       }
     }
